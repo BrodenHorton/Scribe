@@ -1,80 +1,65 @@
 package com.example.scribe
 
 import android.os.Bundle
-import android.widget.TextView
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import android.util.Log
-import com.google.gson.Gson
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
-class MainActivity : AppCompatActivity() {
-    private val TAG : String = "MainActivity"
-    private lateinit var tvSpeakerCount : TextView
-    private lateinit var tvSpeechBlock1 : TextView
-    private lateinit var tvSpeechBlock2 : TextView
-
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(R.layout.activity_main)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
+        setContent {
+            BackgroundColumn {
+                for(i in 1 .. 4)
+                    SpeechBubble("This is my first message!")
+            }
         }
 
-        tvSpeakerCount = findViewById(R.id.speakerCount)
-        tvSpeechBlock1 = findViewById(R.id.tvSpeechBlock1)
-        tvSpeechBlock1.text = "Speech Block 1"
-        tvSpeechBlock2 = findViewById(R.id.tvSpeechBlock2)
-        tvSpeechBlock2.text = "Speech Block 2"
-
-        GlobalScope.launch {
-            getInitialSpeechBlocks()
-        }
     }
+}
 
-    suspend fun getInitialSpeechBlocks() {
-        var isActive = true
-        while(isActive) {
-            val url = URL("http://10.0.2.2:3000/all")
-            val connection = url.openConnection() as HttpURLConnection
+@Composable
+fun BackgroundColumn(content: @Composable (ColumnScope.() -> Unit)) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(30.dp),
+        content = content
+    )
+}
 
-            if(connection.responseCode == 200) {
-                Log.i("Coroutine", "Fetching from API")
-                val inputStream = connection.getInputStream()
-                val inputStreamReader = InputStreamReader(inputStream, "UTF-8")
-                val scribeRequest = Gson().fromJson(inputStreamReader, ScribeRequest::class.java)
-                inputStreamReader.close()
-                inputStream.close()
-                tvSpeakerCount.text = "Total Speech Blocks: ${scribeRequest.speechBlocks.size}"
-                var count = 0
-                for(speechBlock in scribeRequest.speechBlocks) {
-                    if(count % 2 == 0)
-                        tvSpeechBlock1.text = speechBlock.text
-                    else
-                        tvSpeechBlock2.text = speechBlock.text
-                    count++
-                }
-            }
-            else {
-                tvSpeechBlock1.text = "Error fetching data from Scribe Server!"
-                tvSpeechBlock2.text = ""
-                Log.i("Coroutine", "Error in request to Scribe Server")
-                isActive = false
-            }
-
-            if(isActive) {
-                delay(300)
-            }
-        }
+@Composable
+fun SpeechBubble(text: String) {
+    Box(
+        contentAlignment = Alignment.TopStart,
+        modifier = Modifier
+            .background(Color.Green, shape = RoundedCornerShape(20.dp))
+            .size(315.dp, 150.dp) // Define a specific size
+            .padding(18.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 20.sp
+            //textAlign = TextAlign.Center,
+        )
     }
 }

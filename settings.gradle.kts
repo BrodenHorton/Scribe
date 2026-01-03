@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Scribe"
 include(":app")
+ 
