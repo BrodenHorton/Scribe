@@ -7,11 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,41 +25,51 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        var speechBlocks: MutableList<SpeechBlock> = mutableListOf()
         setContent {
-            BackgroundColumn {
-                for(i in 1 .. 4)
-                    SpeechBubble("This is my first message!")
-            }
+            speechBlocksLazyColumn(speechBlocks)
         }
+        for(i in 1 .. 20)
+            speechBlocks.add(SpeechBlock(0, i.toString(), "This is speech block ${i}!"))
 
     }
 }
 
 @Composable
-fun BackgroundColumn(content: @Composable (ColumnScope.() -> Unit)) {
-    Column(
+fun speechBlocksLazyColumn(speechBlocks: MutableList<SpeechBlock>) {
+    LazyColumn(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
             .padding(30.dp),
-        content = content
-    )
+    ) {
+        var count = 0
+        items(speechBlocks) { speechBlock ->
+            val alignment: Alignment = if(count % 2 == 0) Alignment.TopStart else Alignment.TopEnd
+            SpeechBubble(speechBlock.text, alignment)
+            count++
+        }
+    }
 }
 
 @Composable
-fun SpeechBubble(text: String) {
+fun SpeechBubble(text: String, boxAlignment: Alignment) {
     Box(
-        contentAlignment = Alignment.TopStart,
-        modifier = Modifier
-            .background(Color.Green, shape = RoundedCornerShape(20.dp))
-            .size(315.dp, 150.dp) // Define a specific size
-            .padding(18.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
-        Text(
-            text = text,
-            fontSize = 20.sp
-            //textAlign = TextAlign.Center,
-        )
+        Box(
+            contentAlignment = Alignment.TopStart,
+            modifier = Modifier
+                .background(Color.Green, shape = RoundedCornerShape(20.dp))
+                .sizeIn(maxWidth = 315.dp)
+                .padding(18.dp)
+                .align(boxAlignment)
+        ) {
+            Text(
+                text = text,
+                fontSize = 20.sp,
+            )
+        }
     }
 }
