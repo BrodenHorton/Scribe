@@ -1,11 +1,11 @@
 package com.example.scribe
 
 class ScribeRequest {
-    var date: String
-    var speechBlocks: Array<SpeechBlock>
+    var date: RequestDate
+    var speechLines: Array<SpeechLineRequest>
 
-    constructor(date: String, speechBlocks: Array<SpeechBlock>) {
+    constructor(date: RequestDate, speechLines: Array<SpeechLineRequest>) {
         this.date = date
-        this.speechBlocks = speechBlocks
+        this.speechLines = speechLines
     }
 }

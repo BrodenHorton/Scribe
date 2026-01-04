@@ -16,14 +16,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -31,10 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.InputStreamReader
@@ -42,8 +38,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class MainActivity : ComponentActivity() {
-    var speechBlocks: MutableList<SpeechBlock> = mutableListOf()
-    var lastRequested: String = ""
+    var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
+    lateinit var lastRequested: RequestDate
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,18 +47,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             speechBlocksLazyColumn(speechBlocks)
         }
-        /*for(i in 1 .. 20)
-            speechBlocks.add(SpeechBlock(0, i.toString(), "This is speech block ${i}!"))*/
 
-        val initialRequestScope = CoroutineScope(Dispatchers.IO)
-        initialRequestScope.launch {
+        val fetchRequestScope = CoroutineScope(Dispatchers.IO)
+        fetchRequestScope.launch {
+            Log.i("Coroutine", "Fetching from API /all")
             getInitialSpeechBlocks()
-            initialRequestScope.cancel()
-        }
-
-        val fetchRecentSpeechBlocksScope = CoroutineScope(Dispatchers.IO)
-        fetchRecentSpeechBlocksScope.launch {
-            getSpeechBlocks("")
+            Log.i("Coroutine", "Fetching from API /after")
+            getSpeechBlocks()
         }
     }
 
@@ -71,15 +62,15 @@ class MainActivity : ComponentActivity() {
         val connection = url.openConnection() as HttpURLConnection
 
         if(connection.responseCode == 200) {
-            Log.i("Coroutine", "Fetching from API /all")
             val inputStream = connection.getInputStream()
             val inputStreamReader = InputStreamReader(inputStream, "UTF-8")
             val scribeRequest = Gson().fromJson(inputStreamReader, ScribeRequest::class.java)
             inputStreamReader.close()
             inputStream.close()
             lastRequested = scribeRequest.date
-            for(speechBlock in scribeRequest.speechBlocks) {
-                speechBlocks.add(speechBlock)
+            Log.i("/all Request", "Date: ${lastRequested.getDateQueryParam()}")
+            for(speechLineRequest in scribeRequest.speechLines) {
+                speechBlocks.add(SpeechBlock(speechLineRequest))
             }
         }
         else {
@@ -87,21 +78,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    suspend fun getSpeechBlocks(dateTime: String) {
+    suspend fun getSpeechBlocks() {
         var isActive = true
         while(isActive) {
-            val url = URL("http://10.0.2.2:3000/after?lastRequested=${dateTime}")
+            val url = URL("http://10.0.2.2:3000/after?lastRequested=${lastRequested.getDateQueryParam()}")
             val connection = url.openConnection() as HttpURLConnection
 
             if(connection.responseCode == 200) {
-                Log.i("Coroutine", "Fetching from API /after")
                 val inputStream = connection.getInputStream()
                 val inputStreamReader = InputStreamReader(inputStream, "UTF-8")
                 val scribeRequest = Gson().fromJson(inputStreamReader, ScribeRequest::class.java)
                 inputStreamReader.close()
                 inputStream.close()
-
-
+                lastRequested = scribeRequest.date
+                for(speechLineRequest in scribeRequest.speechLines) {
+                    Log.i("Coroutine", "New Line fetched: ${speechLineRequest.text}")
+                    var isNewSpeechLine = true
+                    for(speechBlock in speechBlocks) {
+                        if(speechBlock.blockUuid == speechLineRequest.blockUuid) {
+                            speechBlock.text.value = speechLineRequest.text
+                            isNewSpeechLine = false
+                            break
+                        }
+                    }
+                    if(isNewSpeechLine)
+                        speechBlocks.add(SpeechBlock(speechLineRequest))
+                }
             }
             else {
                 Log.i("Coroutine", "Error in request to endpoint /after from Scribe Server")
@@ -116,7 +118,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun speechBlocksLazyColumn(speechBlocks: MutableList<SpeechBlock>) {
+fun speechBlocksLazyColumn(input: MutableList<SpeechBlock>) {
+    var speechBlocks = remember { input }
+
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
@@ -126,14 +130,14 @@ fun speechBlocksLazyColumn(speechBlocks: MutableList<SpeechBlock>) {
     ) {
         var count = 0
         items(speechBlocks) { speechBlock ->
-            SpeechBubble(speechBlock)
+            SpeechBlockComponent(speechBlock)
             count++
         }
     }
 }
 
 @Composable
-fun SpeechBubble(speechBlock: SpeechBlock) {
+fun SpeechBlockComponent(speechBlock: SpeechBlock) {
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -160,7 +164,7 @@ fun SpeechBubble(speechBlock: SpeechBlock) {
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = speechBlock.text,
+                        text = speechBlock.text.value,
                         fontSize = 20.sp,
                     )
                     Text(
