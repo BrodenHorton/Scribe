@@ -1,22 +1,18 @@
 package com.example.scribe
 
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 
 class SpeechBlock {
     var speaker: Int
-    var blockUuid: String
-    var text: MutableState<String> = mutableStateOf("")
+    var speechLines: MutableList<SpeechLine>
 
-    constructor(speaker: Int, blockUuid: String, text: String) {
+    constructor(speaker: Int) {
         this.speaker = speaker
-        this.blockUuid = blockUuid
-        this.text.value = text
+        this.speechLines = mutableStateListOf()
     }
 
     constructor(speechLineRequest: SpeechLineRequest) {
         this.speaker = speechLineRequest.speaker
-        this.blockUuid = speechLineRequest.blockUuid
-        this.text.value = speechLineRequest.text
+        this.speechLines = mutableStateListOf(SpeechLine(speechLineRequest))
     }
 }

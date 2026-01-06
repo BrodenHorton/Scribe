@@ -69,9 +69,8 @@ class MainActivity : ComponentActivity() {
             inputStream.close()
             lastRequested = scribeRequest.date
             Log.i("/all Request", "Date: ${lastRequested.getDateQueryParam()}")
-            for(speechLineRequest in scribeRequest.speechLines) {
-                speechBlocks.add(SpeechBlock(speechLineRequest))
-            }
+            for(speechLineRequest in scribeRequest.speechLines)
+                addSpeechLine(speechLineRequest)
         }
         else {
             Log.i("Coroutine", "Error when sending GET request to endpoint /all from Scribe Server")
@@ -92,11 +91,10 @@ class MainActivity : ComponentActivity() {
                 inputStream.close()
                 lastRequested = scribeRequest.date
                 for(speechLineRequest in scribeRequest.speechLines) {
-                    Log.i("Coroutine", "New Line fetched: ${speechLineRequest.text}")
                     var isNewSpeechLine = true
                     for(speechBlock in speechBlocks) {
                         if(speechBlock.blockUuid == speechLineRequest.blockUuid) {
-                            speechBlock.text.value = speechLineRequest.text
+                            speechBlock.speechLines.value = speechLineRequest.text
                             isNewSpeechLine = false
                             break
                         }
@@ -114,6 +112,22 @@ class MainActivity : ComponentActivity() {
                 delay(300)
             }
         }
+    }
+
+    // TODO: Create map for last speech block for each speaker. Check if the next
+    // speech line speaker is the same as the last speech block speaker. If so, add
+    // the new speech line to the last speech block. Otherwise, create a new speech block
+    fun addSpeechLine(speechLineRequest: SpeechLineRequest) {
+        var hasExistingSpeechBlock = false
+        for(speechBlock in speechBlocks) {
+            if(speechBlock.blockUuid == speechLineRequest.blockUuid) {
+                speechBlock.speechLines.add(speechLineRequest.text)
+                hasExistingSpeechBlock = true
+            }
+        }
+
+        if(!hasExistingSpeechBlock)
+            speechBlocks.add(SpeechBlock(speechLineRequest))
     }
 }
 
@@ -145,7 +159,7 @@ fun SpeechBlockComponent(speechBlock: SpeechBlock) {
             Text(
                 text = speechBlock.speaker.toString(),
                 fontWeight = FontWeight.Medium,
-                color = Color.Green,
+                color = if (speechBlock.speaker.toString() == "0") Color.Green else Color.Blue,
                 fontSize = 18.sp,
             )
             Row(
@@ -156,7 +170,7 @@ fun SpeechBlockComponent(speechBlock: SpeechBlock) {
             ) {
                 Box(
                     modifier = Modifier
-                        .background(color = Color.Green)
+                        .background(color = if (speechBlock.speaker.toString() == "0") Color.Green else Color.Blue)
                         .width(4.dp)
                         .fillMaxHeight(1f)
                 )
@@ -164,13 +178,13 @@ fun SpeechBlockComponent(speechBlock: SpeechBlock) {
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = speechBlock.text.value,
+                        text = speechBlock.speechLines.value,
                         fontSize = 20.sp,
                     )
-                    Text(
+                    /*Text(
                         text = "Text item 2!",
                         fontSize = 20.sp,
-                    )
+                    )*/
                 }
             }
         }
