@@ -39,6 +39,7 @@ import java.net.URL
 
 class MainActivity : ComponentActivity() {
     var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
+    var lastSpeechBlockBySpeaker: MutableMap<Int, SpeechBlock> = mutableMapOf()
     lateinit var lastRequested: RequestDate
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,14 +61,16 @@ class MainActivity : ComponentActivity() {
     fun getInitialSpeechBlocks() {
         val url = URL("http://10.0.2.2:3000/all")
         val connection = url.openConnection() as HttpURLConnection
-
+        Log.i("/all Request", "All 1")
         if(connection.responseCode == 200) {
             val inputStream = connection.getInputStream()
             val inputStreamReader = InputStreamReader(inputStream, "UTF-8")
             val scribeRequest = Gson().fromJson(inputStreamReader, ScribeRequest::class.java)
             inputStreamReader.close()
             inputStream.close()
+            Log.i("/all Request", "All 2")
             lastRequested = scribeRequest.date
+            Log.i("/all Request", "All 3")
             Log.i("/all Request", "Date: ${lastRequested.getDateQueryParam()}")
             for(speechLineRequest in scribeRequest.speechLines)
                 addSpeechLine(speechLineRequest)
@@ -90,18 +93,8 @@ class MainActivity : ComponentActivity() {
                 inputStreamReader.close()
                 inputStream.close()
                 lastRequested = scribeRequest.date
-                for(speechLineRequest in scribeRequest.speechLines) {
-                    var isNewSpeechLine = true
-                    for(speechBlock in speechBlocks) {
-                        if(speechBlock.blockUuid == speechLineRequest.blockUuid) {
-                            speechBlock.speechLines.value = speechLineRequest.text
-                            isNewSpeechLine = false
-                            break
-                        }
-                    }
-                    if(isNewSpeechLine)
-                        speechBlocks.add(SpeechBlock(speechLineRequest))
-                }
+                for(speechLineRequest in scribeRequest.speechLines)
+                    addSpeechLine(speechLineRequest)
             }
             else {
                 Log.i("Coroutine", "Error in request to endpoint /after from Scribe Server")
@@ -114,20 +107,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // TODO: Create map for last speech block for each speaker. Check if the next
-    // speech line speaker is the same as the last speech block speaker. If so, add
-    // the new speech line to the last speech block. Otherwise, create a new speech block
     fun addSpeechLine(speechLineRequest: SpeechLineRequest) {
-        var hasExistingSpeechBlock = false
-        for(speechBlock in speechBlocks) {
-            if(speechBlock.blockUuid == speechLineRequest.blockUuid) {
-                speechBlock.speechLines.add(speechLineRequest.text)
-                hasExistingSpeechBlock = true
+        if(!speechBlocks.isEmpty() && lastSpeechBlockBySpeaker.contains(speechLineRequest.speaker)) {
+            var speechBlock = lastSpeechBlockBySpeaker[speechLineRequest.speaker]
+            if(speechBlock?.speechLines?.last()?.lineUuid == speechLineRequest.lineUuid) {
+                speechBlock.speechLines.last().text.value = speechLineRequest.text
+                return
             }
         }
 
-        if(!hasExistingSpeechBlock)
-            speechBlocks.add(SpeechBlock(speechLineRequest))
+        if(!speechBlocks.isEmpty() && speechBlocks.last().speaker == speechLineRequest.speaker) {
+            speechBlocks.last().speechLines.add(SpeechLine(speechLineRequest))
+        }
+        else {
+            val nextSpeechBlock = SpeechBlock(speechLineRequest)
+            speechBlocks.add(nextSpeechBlock)
+            lastSpeechBlockBySpeaker[speechLineRequest.speaker] = nextSpeechBlock
+        }
     }
 }
 
@@ -177,14 +173,12 @@ fun SpeechBlockComponent(speechBlock: SpeechBlock) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = speechBlock.speechLines.value,
-                        fontSize = 20.sp,
-                    )
-                    /*Text(
-                        text = "Text item 2!",
-                        fontSize = 20.sp,
-                    )*/
+                    for(speechLine in speechBlock.speechLines) {
+                        Text(
+                            text = speechLine.text.value,
+                            fontSize = 20.sp,
+                        )
+                    }
                 }
             }
         }
