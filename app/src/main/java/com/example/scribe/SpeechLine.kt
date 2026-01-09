@@ -7,16 +7,19 @@ class SpeechLine {
     var speaker: Int
     var lineUuid: String
     var text: MutableState<String>
+    var isFinalized: Boolean
 
-    constructor(speaker: Int, lineUuid: String, text: String) {
+    constructor(speaker: Int, lineUuid: String, text: String, isFinalized: Boolean) {
         this.speaker = speaker
         this.lineUuid = lineUuid
         this.text = mutableStateOf(text)
+        this.isFinalized = isFinalized
     }
 
     constructor(speechLineRequest: SpeechLineRequest) {
         this.speaker = speechLineRequest.speaker
         this.lineUuid = speechLineRequest.lineUuid
         this.text = mutableStateOf(speechLineRequest.text)
+        this.isFinalized = speechLineRequest.isFinalized
     }
 }

@@ -34,6 +34,9 @@ import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.scribe.command.ColorCommand
+import com.example.scribe.command.NameCommand
+import com.example.scribe.command.SpeechCommand
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +50,9 @@ class MainActivity : ComponentActivity() {
     var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
     var lastSpeechBlockBySpeaker: MutableMap<Int, SpeechBlock> = mutableMapOf()
     lateinit var lastRequested: RequestDate
+    var speakerByIndex: MutableMap<Int, Speaker> = mutableMapOf()
+    var inProgressCommandByUuid: MutableMap<String, SpeechLine> = mutableMapOf()
+    var speechCommandByName: MutableMap<String, SpeechCommand> = mutableMapOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +61,8 @@ class MainActivity : ComponentActivity() {
             speechBlocksLazyColumn(speechBlocks)
         }
 
+        registerCommands()
+
         val fetchRequestScope = CoroutineScope(Dispatchers.IO)
         fetchRequestScope.launch {
             Log.i("Coroutine", "Fetching from API /all")
@@ -62,6 +70,13 @@ class MainActivity : ComponentActivity() {
             Log.i("Coroutine", "Fetching from API /after")
             getSpeechBlocks()
         }
+    }
+
+    fun registerCommands() {
+        val nameCommand = NameCommand()
+        speechCommandByName[nameCommand.cmd] = nameCommand
+        val colorCommand = ColorCommand()
+        speechCommandByName[colorCommand.cmd] = colorCommand
     }
 
     fun getInitialSpeechBlocks() {
