@@ -16,13 +16,14 @@ class ColorCommand : SpeechCommand("color") {
         Pair("cyan", Color(0xFF02c2b5)))
 
     override fun execute(mt: MainActivity, speaker: Speaker, args: List<String>) {
+        Log.i("ColorCommand", "Color Command Executed!")
         if(args.isEmpty()) {
             Log.i("ColorCommand", "args empty")
             return
         }
 
         if(colorByName.contains(args[0]) && colorByName[args[0]] != null)
-            speaker.color = colorByName[args[0]]!!
+            speaker.color.value = colorByName[args[0]]!!
         else
             Log.i("ColorCommand", "Color not found")
 

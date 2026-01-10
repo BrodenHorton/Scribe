@@ -7,6 +7,7 @@ import com.example.scribe.Speaker
 class NameCommand : SpeechCommand("name") {
 
     override fun execute(mt: MainActivity, speaker: Speaker, args: List<String>) {
+        Log.i("NameCommand", "Name Command Executed!")
         if(args.isEmpty()) {
             Log.i("NameCommand", "args empty")
             return
@@ -15,6 +16,6 @@ class NameCommand : SpeechCommand("name") {
         var name = ""
         for(str in args)
             name += "$str "
-        speaker.name = name
+        speaker.name.value = name
     }
 }

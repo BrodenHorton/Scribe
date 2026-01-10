@@ -93,8 +93,16 @@ class MainActivity : ComponentActivity() {
             lastRequested = scribeRequest.date
             Log.i("/all Request", "All 3")
             Log.i("/all Request", "Date: ${lastRequested.getDateQueryParam()}")
-            for(speechLineRequest in scribeRequest.speechLines)
-                addSpeechLine(speechLineRequest)
+            for(speechLineRequest in scribeRequest.speechLines) {
+                if(!speakerByIndex.contains(speechLineRequest.speaker))
+                    speakerByIndex[speechLineRequest.speaker] = Speaker("Speaker ${speechLineRequest.speaker}", Color.LightGray)
+
+                if(isSpeechCommand(speechLineRequest.text))
+                    inProgressCommandByUuid[speechLineRequest.lineUuid] = SpeechLine(speechLineRequest)
+                else
+                    addSpeechLine(speechLineRequest)
+            }
+            flushSpeechCommands()
         }
         else {
             Log.i("Coroutine", "Error when sending GET request to endpoint /all from Scribe Server")
@@ -114,8 +122,16 @@ class MainActivity : ComponentActivity() {
                 inputStreamReader.close()
                 inputStream.close()
                 lastRequested = scribeRequest.date
-                for(speechLineRequest in scribeRequest.speechLines)
-                    addSpeechLine(speechLineRequest)
+                for(speechLineRequest in scribeRequest.speechLines) {
+                    if(!speakerByIndex.contains(speechLineRequest.speaker))
+                        speakerByIndex[speechLineRequest.speaker] = Speaker("Speaker ${speechLineRequest.speaker}", Color.LightGray)
+
+                    if(isSpeechCommand(speechLineRequest.text))
+                        inProgressCommandByUuid[speechLineRequest.lineUuid] = SpeechLine(speechLineRequest)
+                    else
+                        addSpeechLine(speechLineRequest)
+                }
+                flushSpeechCommands()
             }
             else {
                 Log.i("Coroutine", "Error in request to endpoint /after from Scribe Server")
@@ -146,67 +162,107 @@ class MainActivity : ComponentActivity() {
             lastSpeechBlockBySpeaker[speechLineRequest.speaker] = nextSpeechBlock
         }
     }
-}
 
-@Composable
-fun speechBlocksLazyColumn(input: MutableList<SpeechBlock>) {
-    val speechBlocks = remember { input }
-    val listState = rememberLazyListState()
+    fun isSpeechCommand(str: String): Boolean {
+        var firstWord = str
+            .toLowerCase()
+            .replace(".", "")
+            .replace(",", "")
+            .split(" ")
+            .first()
 
-    LaunchedEffect(speechBlocks.last().speechLines.last().text.value) {
-        if (speechBlocks.isNotEmpty())
-            listState.animateScrollToItem(index = speechBlocks.lastIndex + 1)
+        return firstWord.equals("command", true)
     }
 
-    LazyColumn(
-        state = listState,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(bottom = 80.dp),
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .padding(30.dp)
-    ) {
-        var count = 0
-        items(speechBlocks) { speechBlock ->
-            SpeechBlockComponent(speechBlock)
-            count++
+    fun flushSpeechCommands() {
+        val entrySet = inProgressCommandByUuid.entries
+        for(entry in entrySet) {
+            Log.i("Command ForEach", "Entered Command ForEach")
+            var speechLine = entry.value
+            if(!speechLine.isFinalized)
+                continue
+
+            var cmdStr = speechLine.text.value
+                .toLowerCase()
+                .replace(".", "")
+                .replace(",", "")
+                .split(" ")
+            if(cmdStr.isEmpty())
+                continue
+
+            var cmd = cmdStr[1]
+            var args: List<String> = mutableListOf()
+            if(cmdStr.size > 2)
+                args = cmdStr.slice(IntRange(2, cmdStr.size - 1))
+
+            Log.i("Command ForEach", "Executing Command")
+            if(speakerByIndex[speechLine.speaker] != null)
+                speechCommandByName[cmd]?.execute(this, speakerByIndex[speechLine.speaker]!!, args)
+
+            inProgressCommandByUuid.remove(entry.key)
         }
     }
-}
 
-@Composable
-fun SpeechBlockComponent(speechBlock: SpeechBlock) {
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = speechBlock.speaker.toString(),
-                fontWeight = FontWeight.Medium,
-                color = if (speechBlock.speaker.toString() == "0") Color.Green else Color.Blue,
-                fontSize = 18.sp,
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Max)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(color = if (speechBlock.speaker.toString() == "0") Color.Green else Color.Blue)
-                        .width(4.dp)
-                        .fillMaxHeight(1f)
+    @Composable
+    fun speechBlocksLazyColumn(input: MutableList<SpeechBlock>) {
+        val speechBlocks = remember { input }
+        val listState = rememberLazyListState()
+
+        LaunchedEffect(speechBlocks.last().speechLines.last().text.value) {
+            if (speechBlocks.isNotEmpty())
+                listState.animateScrollToItem(index = speechBlocks.lastIndex + 1)
+        }
+
+        LazyColumn(
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 80.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .padding(30.dp)
+        ) {
+            var count = 0
+            items(speechBlocks) { speechBlock ->
+                SpeechBlockComponent(speechBlock)
+                count++
+            }
+        }
+    }
+
+    @Composable
+    fun SpeechBlockComponent(speechBlock: SpeechBlock) {
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = speakerByIndex[speechBlock.speaker]?.name?.value!!,
+                    fontWeight = FontWeight.Medium,
+                    color = speakerByIndex[speechBlock.speaker]?.color?.value!!,
+                    fontSize = 18.sp,
                 )
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max)
                 ) {
-                    for(speechLine in speechBlock.speechLines) {
-                        Text(
-                            text = speechLine.text.value,
-                            fontSize = 20.sp,
-                        )
+                    Box(
+                        modifier = Modifier
+                            .background(color = speakerByIndex[speechBlock.speaker]?.color?.value!!)
+                            .width(4.dp)
+                            .fillMaxHeight(1f)
+                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        for(speechLine in speechBlock.speechLines) {
+                            Text(
+                                text = speechLine.text.value,
+                                fontSize = 20.sp,
+                            )
+                        }
                     }
                 }
             }
