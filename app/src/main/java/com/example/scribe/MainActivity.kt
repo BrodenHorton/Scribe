@@ -49,6 +49,7 @@ import java.net.URL
 class MainActivity : ComponentActivity() {
     var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
     var lastSpeechBlockBySpeaker: MutableMap<Int, SpeechBlock> = mutableMapOf()
+    var speechCommandTextLines: MutableList<TextLine> = mutableStateListOf()
     lateinit var lastRequested: RequestDate
     var speakerByIndex: MutableMap<Int, Speaker> = mutableMapOf()
     var inProgressCommandByUuid: MutableMap<String, SpeechLine> = mutableMapOf()
@@ -82,17 +83,13 @@ class MainActivity : ComponentActivity() {
     fun getInitialSpeechBlocks() {
         val url = URL("http://10.0.2.2:3000/all")
         val connection = url.openConnection() as HttpURLConnection
-        Log.i("/all Request", "All 1")
         if(connection.responseCode == 200) {
             val inputStream = connection.getInputStream()
             val inputStreamReader = InputStreamReader(inputStream, "UTF-8")
             val scribeRequest = Gson().fromJson(inputStreamReader, ScribeRequest::class.java)
             inputStreamReader.close()
             inputStream.close()
-            Log.i("/all Request", "All 2")
             lastRequested = scribeRequest.date
-            Log.i("/all Request", "All 3")
-            Log.i("/all Request", "Date: ${lastRequested.getDateQueryParam()}")
             for(speechLineRequest in scribeRequest.speechLines) {
                 if(!speakerByIndex.contains(speechLineRequest.speaker))
                     speakerByIndex[speechLineRequest.speaker] = Speaker("Speaker ${speechLineRequest.speaker}", Color.LightGray)
@@ -177,27 +174,37 @@ class MainActivity : ComponentActivity() {
     fun flushSpeechCommands() {
         val entrySet = inProgressCommandByUuid.entries
         for(entry in entrySet) {
-            Log.i("Command ForEach", "Entered Command ForEach")
             var speechLine = entry.value
             if(!speechLine.isFinalized)
                 continue
-
+            Log.i("Command ForEach", "Entered Command ForEach")
             var cmdStr = speechLine.text.value
                 .toLowerCase()
                 .replace(".", "")
                 .replace(",", "")
+                .replace("?", "")
+                .replace("!", "")
                 .split(" ")
-            if(cmdStr.isEmpty())
+            if(cmdStr.size < 2)
                 continue
-
             var cmd = cmdStr[1]
+            if(!speechCommandByName.contains(cmd)) {
+                speechCommandTextLines.add(TextLine("Invalid command: $cmd"))
+                inProgressCommandByUuid.remove(entry.key)
+                continue
+            }
+            if(speakerByIndex[speechLine.speaker] == null) {
+                speechCommandTextLines.add(TextLine("Invalid speaker"))
+                inProgressCommandByUuid.remove(entry.key)
+                continue
+            }
+
             var args: List<String> = mutableListOf()
             if(cmdStr.size > 2)
                 args = cmdStr.slice(IntRange(2, cmdStr.size - 1))
 
-            Log.i("Command ForEach", "Executing Command")
-            if(speakerByIndex[speechLine.speaker] != null)
-                speechCommandByName[cmd]?.execute(this, speakerByIndex[speechLine.speaker]!!, args)
+            val result = speechCommandByName[cmd]?.execute(this, speakerByIndex[speechLine.speaker]!!, args)
+            speechCommandTextLines.add(TextLine(result!!))
 
             inProgressCommandByUuid.remove(entry.key)
         }

@@ -8,12 +8,14 @@ class SpeechLine {
     var lineUuid: String
     var text: MutableState<String>
     var isFinalized: Boolean
+    var created: Long
 
     constructor(speaker: Int, lineUuid: String, text: String, isFinalized: Boolean) {
         this.speaker = speaker
         this.lineUuid = lineUuid
         this.text = mutableStateOf(text)
         this.isFinalized = isFinalized
+        created = System.currentTimeMillis()
     }
 
     constructor(speechLineRequest: SpeechLineRequest) {
@@ -21,5 +23,6 @@ class SpeechLine {
         this.lineUuid = speechLineRequest.lineUuid
         this.text = mutableStateOf(speechLineRequest.text)
         this.isFinalized = speechLineRequest.isFinalized
+        created = System.currentTimeMillis()
     }
 }
