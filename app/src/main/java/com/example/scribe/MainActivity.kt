@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.scribe.command.ColorCommand
@@ -150,7 +151,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        if(!speechBlocks.isEmpty() && speechBlocks.last().speaker == speechLineRequest.speaker) {
+
+        if(!speechBlocks.isEmpty() &&
+            (speechCommandTextLines.isEmpty() || speechBlocks.last().created > speechCommandTextLines.last().created)
+            && speechBlocks.last().speaker == speechLineRequest.speaker) {
             speechBlocks.last().speechLines.add(SpeechLine(speechLineRequest))
         }
         else {
@@ -185,8 +189,10 @@ class MainActivity : ComponentActivity() {
                 .replace("?", "")
                 .replace("!", "")
                 .split(" ")
-            if(cmdStr.size < 2)
+            if(cmdStr.size < 2) {
+                inProgressCommandByUuid.remove(entry.key)
                 continue
+            }
             var cmd = cmdStr[1]
             if(!speechCommandByName.contains(cmd)) {
                 speechCommandTextLines.add(TextLine("Invalid command: $cmd"))
@@ -229,10 +235,41 @@ class MainActivity : ComponentActivity() {
                 .background(Color.White)
                 .padding(30.dp)
         ) {
-            var count = 0
-            items(speechBlocks) { speechBlock ->
-                SpeechBlockComponent(speechBlock)
-                count++
+            var speechBlockIndex = 0
+            var speechCommandTextLineIndex = 0
+            while(speechBlockIndex < speechBlocks.size
+                && speechCommandTextLineIndex < speechCommandTextLines.size) {
+                if(speechBlocks[speechBlockIndex].created < speechCommandTextLines[speechCommandTextLineIndex].created) {
+                    val staticIndex = speechBlockIndex
+                    item {
+                        SpeechBlockComponent(speechBlocks[staticIndex])
+                    }
+                    speechBlockIndex++
+                }
+                else {
+                    val staticIndex = speechCommandTextLineIndex
+                    item {
+                        SpeechCommandComponent(speechCommandTextLines[staticIndex])
+                    }
+                    speechCommandTextLineIndex++
+                }
+            }
+
+            while(speechBlockIndex < speechBlocks.size) {
+                val staticIndex = speechBlockIndex
+                item {
+                    Log.i("Temp", "SpeechBlockIndex: ${staticIndex}")
+                    Log.i("Temp", "SpeechBlock Size: ${speechBlocks.size}")
+                    SpeechBlockComponent(speechBlocks[staticIndex])
+                }
+                speechBlockIndex++
+            }
+            while(speechCommandTextLineIndex < speechCommandTextLines.size) {
+                val staticIndex = speechCommandTextLineIndex
+                item {
+                    SpeechCommandComponent(speechCommandTextLines[staticIndex])
+                }
+                speechCommandTextLineIndex++
             }
         }
     }
@@ -272,6 +309,25 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    @Composable
+    fun SpeechCommandComponent(speechCommandTextLine: TextLine) {
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxSize()) {
+                Text(
+                    text = speechCommandTextLine.text.value,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.LightGray,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
