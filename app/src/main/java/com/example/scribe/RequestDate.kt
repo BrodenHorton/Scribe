@@ -1,6 +1,6 @@
 package com.example.scribe
 
-class RequestDate {
+class RequestDate : Comparable<RequestDate> {
     var year: Int
     var month: Int
     var day: Int
@@ -49,5 +49,44 @@ class RequestDate {
         val offsetSign = if(timeZoneOffset >= 0) "%2D" else "%2B"
 
         return "${offsetSign}${hoursOffsetParam}%3A${minutesOffsetParam}"
+    }
+
+    override fun compareTo(other: RequestDate): Int {
+        if(this.year > other.year)
+            return 1
+        else if(this.year < other.year)
+            return -1
+
+        if(this.month > other.month)
+            return 1
+        else if(this.month < other.month)
+            return -1
+
+        if(this.day > other.day)
+            return 1
+        else if(this.day < other.day)
+            return -1
+
+        if(this.hours > other.hours)
+            return 1
+        else if(this.hours < other.hours)
+            return -1
+
+        if(this.minutes > other.minutes)
+            return 1
+        else if(this.minutes < other.minutes)
+            return -1
+
+        if(this.seconds > other.seconds)
+            return 1
+        else if(this.seconds < other.seconds)
+            return -1
+
+        if(this.milliseconds > other.milliseconds)
+            return 1
+        else if(this.milliseconds < other.milliseconds)
+            return -1
+
+        return 0
     }
 }

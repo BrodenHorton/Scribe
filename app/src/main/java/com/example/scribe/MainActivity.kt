@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 
 class MainActivity : ComponentActivity() {
     var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
@@ -53,7 +54,7 @@ class MainActivity : ComponentActivity() {
     var speechCommandTextLines: MutableList<TextLine> = mutableStateListOf()
     lateinit var lastRequested: RequestDate
     var speakerByIndex: MutableMap<Int, Speaker> = mutableMapOf()
-    var inProgressCommandByUuid: MutableMap<String, SpeechLine> = mutableMapOf()
+    var inProgressCommandByUuid: ConcurrentHashMap<String, SpeechLine> = ConcurrentHashMap()
     var speechCommandByName: MutableMap<String, SpeechCommand> = mutableMapOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,16 +92,27 @@ class MainActivity : ComponentActivity() {
             inputStreamReader.close()
             inputStream.close()
             lastRequested = scribeRequest.date
-            for(speechLineRequest in scribeRequest.speechLines) {
-                if(!speakerByIndex.contains(speechLineRequest.speaker))
-                    speakerByIndex[speechLineRequest.speaker] = Speaker("Speaker ${speechLineRequest.speaker}", Color.LightGray)
+            var speechLinesCopy = scribeRequest.speechLines.map { it.copy() }.toMutableList()
+            while(!speechLinesCopy.isEmpty()) {
+                var nextSpeechLine = speechLinesCopy[0]
+                for(speechLineRequest in speechLinesCopy) {
+                    if(speechLineRequest.created < nextSpeechLine.created)
+                        nextSpeechLine = speechLineRequest
+                }
 
-                if(isSpeechCommand(speechLineRequest.text))
-                    inProgressCommandByUuid[speechLineRequest.lineUuid] = SpeechLine(speechLineRequest)
+                if(!speakerByIndex.contains(nextSpeechLine.speaker))
+                    speakerByIndex[nextSpeechLine.speaker] = Speaker("Speaker ${nextSpeechLine.speaker}", Color.LightGray)
+
+                if(isSpeechCommand(nextSpeechLine.text)) {
+                    inProgressCommandByUuid[nextSpeechLine.lineUuid] = SpeechLine(nextSpeechLine)
+                    if(nextSpeechLine.isFinalized)
+                        flushSpeechCommands()
+                }
                 else
-                    addSpeechLine(speechLineRequest)
+                    addSpeechLine(nextSpeechLine)
+
+                speechLinesCopy.remove(nextSpeechLine)
             }
-            flushSpeechCommands()
         }
         else {
             Log.i("Coroutine", "Error when sending GET request to endpoint /all from Scribe Server")
@@ -258,8 +270,6 @@ class MainActivity : ComponentActivity() {
             while(speechBlockIndex < speechBlocks.size) {
                 val staticIndex = speechBlockIndex
                 item {
-                    Log.i("Temp", "SpeechBlockIndex: ${staticIndex}")
-                    Log.i("Temp", "SpeechBlock Size: ${speechBlocks.size}")
                     SpeechBlockComponent(speechBlocks[staticIndex])
                 }
                 speechBlockIndex++
