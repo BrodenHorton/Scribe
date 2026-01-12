@@ -6,9 +6,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,20 +19,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.paddingFrom
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -45,13 +47,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
 class MainActivity : ComponentActivity() {
     var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
     var lastSpeechBlockBySpeaker: MutableMap<Int, SpeechBlock> = mutableMapOf()
-    var speechCommandTextLines: MutableList<TextLine> = mutableStateListOf()
+    var speechPrompts: MutableList<TextLine> = mutableStateListOf()
     lateinit var lastRequested: RequestDate
     var speakerByIndex: MutableMap<Int, Speaker> = mutableMapOf()
     var inProgressCommandByUuid: ConcurrentHashMap<String, SpeechLine> = ConcurrentHashMap()
@@ -61,10 +64,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            speechBlocksLazyColumn(speechBlocks)
+            Column(modifier = Modifier.fillMaxSize()) {
+                ActionBarComponent()
+                SpeechBlocksLazyColumn()
+            }
         }
 
         registerCommands()
+        speechPrompts.add(TextLine("Start of messages"))
 
         val fetchRequestScope = CoroutineScope(Dispatchers.IO)
         fetchRequestScope.launch {
@@ -84,38 +91,52 @@ class MainActivity : ComponentActivity() {
 
     fun getInitialSpeechBlocks() {
         val url = URL("http://10.0.2.2:3000/all")
-        val connection = url.openConnection() as HttpURLConnection
-        if(connection.responseCode == 200) {
-            val inputStream = connection.getInputStream()
-            val inputStreamReader = InputStreamReader(inputStream, "UTF-8")
-            val scribeRequest = Gson().fromJson(inputStreamReader, ScribeRequest::class.java)
-            inputStreamReader.close()
-            inputStream.close()
-            lastRequested = scribeRequest.date
-            var speechLinesCopy = scribeRequest.speechLines.map { it.copy() }.toMutableList()
-            while(!speechLinesCopy.isEmpty()) {
-                var nextSpeechLine = speechLinesCopy[0]
-                for(speechLineRequest in speechLinesCopy) {
-                    if(speechLineRequest.created < nextSpeechLine.created)
-                        nextSpeechLine = speechLineRequest
+        var connection: HttpURLConnection
+        var hasConnected = false
+        Log.i("API connection", "Connecting to API ...")
+        while(!hasConnected) {
+            try {
+                connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = 1000
+                connection.readTimeout = 1000
+                if(connection.responseCode == 200) {
+                    Log.i("API connection", "Successfully connected to API")
+                    hasConnected = true
+                    val inputStream = connection.getInputStream()
+                    val inputStreamReader = InputStreamReader(inputStream, "UTF-8")
+                    val scribeRequest = Gson().fromJson(inputStreamReader, ScribeRequest::class.java)
+                    inputStreamReader.close()
+                    inputStream.close()
+                    lastRequested = scribeRequest.date
+                    var speechLinesCopy = scribeRequest.speechLines.map { it.copy() }.toMutableList()
+                    while(!speechLinesCopy.isEmpty()) {
+                        var nextSpeechLine = speechLinesCopy[0]
+                        for(speechLineRequest in speechLinesCopy) {
+                            if(speechLineRequest.created < nextSpeechLine.created)
+                                nextSpeechLine = speechLineRequest
+                        }
+
+                        if(!speakerByIndex.contains(nextSpeechLine.speaker))
+                            speakerByIndex[nextSpeechLine.speaker] = Speaker("Speaker ${nextSpeechLine.speaker}", Color.LightGray)
+
+                        if(isSpeechCommand(nextSpeechLine.text)) {
+                            inProgressCommandByUuid[nextSpeechLine.lineUuid] = SpeechLine(nextSpeechLine)
+                            if(nextSpeechLine.isFinalized)
+                                flushSpeechCommands()
+                        }
+                        else
+                            addSpeechLine(nextSpeechLine)
+
+                        speechLinesCopy.remove(nextSpeechLine)
+                    }
                 }
-
-                if(!speakerByIndex.contains(nextSpeechLine.speaker))
-                    speakerByIndex[nextSpeechLine.speaker] = Speaker("Speaker ${nextSpeechLine.speaker}", Color.LightGray)
-
-                if(isSpeechCommand(nextSpeechLine.text)) {
-                    inProgressCommandByUuid[nextSpeechLine.lineUuid] = SpeechLine(nextSpeechLine)
-                    if(nextSpeechLine.isFinalized)
-                        flushSpeechCommands()
+                else {
+                    Log.i("API connection", "Error when sending GET request to endpoint /all from Scribe Server")
                 }
-                else
-                    addSpeechLine(nextSpeechLine)
-
-                speechLinesCopy.remove(nextSpeechLine)
             }
-        }
-        else {
-            Log.i("Coroutine", "Error when sending GET request to endpoint /all from Scribe Server")
+            catch(e: SocketTimeoutException) {
+                Log.i("API connection", "Unable to connect, attempting reconnect")
+            }
         }
     }
 
@@ -163,9 +184,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-
         if(!speechBlocks.isEmpty() &&
-            (speechCommandTextLines.isEmpty() || speechBlocks.last().created > speechCommandTextLines.last().created)
+            (speechPrompts.isEmpty() || speechBlocks.last().created > speechPrompts.last().created)
             && speechBlocks.last().speaker == speechLineRequest.speaker) {
             speechBlocks.last().speechLines.add(SpeechLine(speechLineRequest))
         }
@@ -207,12 +227,12 @@ class MainActivity : ComponentActivity() {
             }
             var cmd = cmdStr[1]
             if(!speechCommandByName.contains(cmd)) {
-                speechCommandTextLines.add(TextLine("Invalid command: $cmd"))
+                speechPrompts.add(TextLine("Invalid command: $cmd"))
                 inProgressCommandByUuid.remove(entry.key)
                 continue
             }
             if(speakerByIndex[speechLine.speaker] == null) {
-                speechCommandTextLines.add(TextLine("Invalid speaker"))
+                speechPrompts.add(TextLine("Invalid speaker"))
                 inProgressCommandByUuid.remove(entry.key)
                 continue
             }
@@ -222,36 +242,36 @@ class MainActivity : ComponentActivity() {
                 args = cmdStr.slice(IntRange(2, cmdStr.size - 1))
 
             val result = speechCommandByName[cmd]?.execute(this, speakerByIndex[speechLine.speaker]!!, args)
-            speechCommandTextLines.add(TextLine(result!!))
+            speechPrompts.add(TextLine(result!!))
 
             inProgressCommandByUuid.remove(entry.key)
         }
     }
 
     @Composable
-    fun speechBlocksLazyColumn(input: MutableList<SpeechBlock>) {
-        val speechBlocks = remember { input }
+    fun ColumnScope.SpeechBlocksLazyColumn() {
         val listState = rememberLazyListState()
 
-        LaunchedEffect(speechBlocks.last().speechLines.last().text.value) {
+        LaunchedEffect(speechBlocks.lastOrNull()?.speechLines?.lastOrNull()?.text?.value, speechPrompts.lastOrNull()) {
             if (speechBlocks.isNotEmpty())
-                listState.animateScrollToItem(index = speechBlocks.lastIndex + 1)
+                listState.animateScrollToItem(index = speechBlocks.size + speechPrompts.size)
         }
 
         LazyColumn(
             state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 80.dp),
+            contentPadding = PaddingValues(top = 2.dp, bottom = 45.dp),
             modifier = Modifier
+                .weight(1f)
                 .fillMaxSize()
                 .background(Color.White)
-                .padding(30.dp)
+                .padding(30.dp, 0.dp, 30.dp, 0.dp)
         ) {
             var speechBlockIndex = 0
             var speechCommandTextLineIndex = 0
             while(speechBlockIndex < speechBlocks.size
-                && speechCommandTextLineIndex < speechCommandTextLines.size) {
-                if(speechBlocks[speechBlockIndex].created < speechCommandTextLines[speechCommandTextLineIndex].created) {
+                && speechCommandTextLineIndex < speechPrompts.size) {
+                if(speechBlocks[speechBlockIndex].created < speechPrompts[speechCommandTextLineIndex].created) {
                     val staticIndex = speechBlockIndex
                     item {
                         SpeechBlockComponent(speechBlocks[staticIndex])
@@ -261,7 +281,7 @@ class MainActivity : ComponentActivity() {
                 else {
                     val staticIndex = speechCommandTextLineIndex
                     item {
-                        SpeechCommandComponent(speechCommandTextLines[staticIndex])
+                        SpeechPromptComponent(speechPrompts[staticIndex])
                     }
                     speechCommandTextLineIndex++
                 }
@@ -274,10 +294,10 @@ class MainActivity : ComponentActivity() {
                 }
                 speechBlockIndex++
             }
-            while(speechCommandTextLineIndex < speechCommandTextLines.size) {
+            while(speechCommandTextLineIndex < speechPrompts.size) {
                 val staticIndex = speechCommandTextLineIndex
                 item {
-                    SpeechCommandComponent(speechCommandTextLines[staticIndex])
+                    SpeechPromptComponent(speechPrompts[staticIndex])
                 }
                 speechCommandTextLineIndex++
             }
@@ -324,7 +344,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun SpeechCommandComponent(speechCommandTextLine: TextLine) {
+    fun SpeechPromptComponent(speechCommandTextLine: TextLine) {
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -336,6 +356,46 @@ class MainActivity : ComponentActivity() {
                     fontWeight = FontWeight.Medium,
                     color = Color.LightGray,
                     fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun ColumnScope.ActionBarComponent() {
+        Box(
+            contentAlignment = Alignment.BottomEnd,
+            modifier = Modifier
+                .weight(0.1f)
+                .fillMaxSize()
+                .height(IntrinsicSize.Max)
+                .background(Color.White)
+                .drawBehind {
+                    val strokeWidth = 1f * density
+                    val y = size.height - strokeWidth / 2
+                    drawLine(
+                        Color.LightGray,
+                        Offset(0f, y),
+                        Offset(size.width, y),
+                        strokeWidth
+                    )
+                }
+        ) {
+            Button(
+                modifier = Modifier.padding(10.dp, 0.dp, 10.dp, 10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF03a9fc)
+                ),
+                onClick = {
+                    speechPrompts.add(TextLine("Button has been clicked!"))
+                }
+            ) {
+                Text(
+                    text = "Connect",
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 16.sp,
                     textAlign = TextAlign.Center
                 )
             }
