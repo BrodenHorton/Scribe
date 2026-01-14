@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -27,7 +28,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -59,6 +62,7 @@ class MainActivity : ComponentActivity() {
     var speakerByIndex: MutableMap<Int, Speaker> = mutableMapOf()
     var inProgressCommandByUuid: ConcurrentHashMap<String, SpeechLine> = ConcurrentHashMap()
     var speechCommandByName: MutableMap<String, SpeechCommand> = mutableMapOf()
+    var isConnectionPanelHidden: MutableState<Boolean> = mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,6 +71,9 @@ class MainActivity : ComponentActivity() {
             Column(modifier = Modifier.fillMaxSize()) {
                 ActionBarComponent()
                 SpeechBlocksLazyColumn()
+            }
+            if(!isConnectionPanelHidden.value) {
+                ConnectionPanelComponent()
             }
         }
 
@@ -388,7 +395,7 @@ class MainActivity : ComponentActivity() {
                     containerColor = Color(0xFF03a9fc)
                 ),
                 onClick = {
-                    speechPrompts.add(TextLine("Button has been clicked!"))
+                    isConnectionPanelHidden.value = false
                 }
             ) {
                 Text(
@@ -398,6 +405,55 @@ class MainActivity : ComponentActivity() {
                     fontSize = 16.sp,
                     textAlign = TextAlign.Center
                 )
+            }
+        }
+    }
+
+    @Composable
+    fun ConnectionPanelComponent() {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .height(600.dp)
+                .background(Color(0x44888888))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(600.dp)
+                    .padding(50.dp, 0.dp)
+                    .align(Alignment.Center)
+                    .background(Color.White)
+                    .drawBehind {
+                        val strokeWidth = 1f * density
+                        val y = size.height - strokeWidth / 2
+                        drawLine(
+                            Color.LightGray,
+                            Offset(0f, y),
+                            Offset(size.width, y),
+                            strokeWidth
+                        )
+                    }
+            ) {
+                Button(
+                    modifier = Modifier
+                        .padding(5.dp)
+                        .align(Alignment.TopEnd),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White
+                    ),
+                    onClick = {
+                        isConnectionPanelHidden.value = true
+                    }
+                ) {
+                    Text(
+                        text = "X",
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF888888),
+                        fontSize = 26.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
