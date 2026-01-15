@@ -6,10 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -25,6 +23,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     var inProgressCommandByUuid: ConcurrentHashMap<String, SpeechLine> = ConcurrentHashMap()
     var speechCommandByName: MutableMap<String, SpeechCommand> = mutableMapOf()
     var isConnectionPanelHidden: MutableState<Boolean> = mutableStateOf(true)
+    var apiAddressField: MutableState<String> = mutableStateOf("10.0.2.2:3000")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -414,14 +415,13 @@ class MainActivity : ComponentActivity() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .height(600.dp)
                 .background(Color(0x44888888))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(600.dp)
-                    .padding(50.dp, 0.dp)
+                    .height(250.dp)
+                    .padding(40.dp, 0.dp)
                     .align(Alignment.Center)
                     .background(Color.White)
                     .drawBehind {
@@ -451,6 +451,38 @@ class MainActivity : ComponentActivity() {
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF888888),
                         fontSize = 26.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                OutlinedTextField(
+                    value = apiAddressField.value,
+                    onValueChange = { newText ->
+                        // Update the state with the new value whenever the user types
+                        apiAddressField.value = newText
+                    },
+                    label = { Text(text = "API Address", fontSize = 18.sp) },
+                    placeholder = { Text(text = "Enter IP Address and port", fontSize = 18.sp) },
+                    textStyle = LocalTextStyle.current.copy(fontSize = 18.sp),
+                    modifier = Modifier
+                        .padding(18.dp, 60.dp, 20.dp, 0.dp)
+                        .height(60.dp)
+                )
+                Button(
+                    modifier = Modifier
+                        .padding(bottom = 20.dp)
+                        .align(Alignment.BottomCenter),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF03a9fc)
+                    ),
+                    onClick = {
+                        isConnectionPanelHidden.value = true
+                    }
+                ) {
+                    Text(
+                        text = "Connect",
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        fontSize = 22.sp,
                         textAlign = TextAlign.Center
                     )
                 }
