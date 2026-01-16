@@ -46,6 +46,7 @@ import com.example.scribe.command.SpeechCommand
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.InputStreamReader
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
     var speakerByIndex: MutableMap<Int, Speaker> = mutableMapOf()
     var inProgressCommandByUuid: ConcurrentHashMap<String, SpeechLine> = ConcurrentHashMap()
     var speechCommandByName: MutableMap<String, SpeechCommand> = mutableMapOf()
+    lateinit var apiJob: Job
     var isConnectionPanelHidden: MutableState<Boolean> = mutableStateOf(true)
     var apiAddressField: MutableState<String> = mutableStateOf("10.0.2.2:3000")
 
@@ -79,15 +81,8 @@ class MainActivity : ComponentActivity() {
         }
 
         registerCommands()
-        speechPrompts.add(TextLine("Start of messages"))
-
-        val fetchRequestScope = CoroutineScope(Dispatchers.IO)
-        fetchRequestScope.launch {
-            Log.i("Coroutine", "Fetching from API /all")
-            getInitialSpeechBlocks()
-            Log.i("Coroutine", "Fetching from API /after")
-            getSpeechBlocks()
-        }
+        speechPrompts.add(TextLine("Connect to API"))
+        launchApiJob()
     }
 
     fun registerCommands() {
@@ -97,16 +92,26 @@ class MainActivity : ComponentActivity() {
         speechCommandByName[colorCommand.cmd] = colorCommand
     }
 
-    fun getInitialSpeechBlocks() {
-        val url = URL("http://10.0.2.2:3000/all")
+    fun launchApiJob() {
+        val fetchRequestScope = CoroutineScope(Dispatchers.IO)
+        apiJob = fetchRequestScope.launch {
+            Log.i("Coroutine", "Fetching from API /all")
+            getInitialSpeechBlocks(apiJob)
+            Log.i("Coroutine", "Fetching from API /after")
+            getSpeechBlocks(apiJob)
+        }
+    }
+
+    fun getInitialSpeechBlocks(job: Job) {
+        val url = URL("http://${apiAddressField.value}/all")
         var connection: HttpURLConnection
         var hasConnected = false
         Log.i("API connection", "Connecting to API ...")
-        while(!hasConnected) {
+        while(!hasConnected && job.isActive) {
             try {
                 connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = 1000
-                connection.readTimeout = 1000
+                connection.connectTimeout = 2000
+                connection.readTimeout = 2000
                 if(connection.responseCode == 200) {
                     Log.i("API connection", "Successfully connected to API")
                     hasConnected = true
@@ -115,7 +120,9 @@ class MainActivity : ComponentActivity() {
                     val scribeRequest = Gson().fromJson(inputStreamReader, ScribeRequest::class.java)
                     inputStreamReader.close()
                     inputStream.close()
+                    clearAllSpeechUI()
                     lastRequested = scribeRequest.date
+                    speechPrompts.add(TextLine("Start of messages"))
                     var speechLinesCopy = scribeRequest.speechLines.map { it.copy() }.toMutableList()
                     while(!speechLinesCopy.isEmpty()) {
                         var nextSpeechLine = speechLinesCopy[0]
@@ -148,10 +155,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    suspend fun getSpeechBlocks() {
+    suspend fun getSpeechBlocks(job: Job) {
         var isActive = true
-        while(isActive) {
-            val url = URL("http://10.0.2.2:3000/after?lastRequested=${lastRequested.getDateQueryParam()}")
+        while(isActive && job.isActive) {
+            val url = URL("http://${apiAddressField.value}/after?lastRequested=${lastRequested.getDateQueryParam()}")
             val connection = url.openConnection() as HttpURLConnection
 
             if(connection.responseCode == 200) {
@@ -254,6 +261,14 @@ class MainActivity : ComponentActivity() {
 
             inProgressCommandByUuid.remove(entry.key)
         }
+    }
+
+    fun clearAllSpeechUI() {
+        speechBlocks.clear()
+        speechPrompts.clear()
+        lastSpeechBlockBySpeaker.clear()
+        speakerByIndex.clear()
+        inProgressCommandByUuid.clear()
     }
 
     @Composable
@@ -475,6 +490,8 @@ class MainActivity : ComponentActivity() {
                         containerColor = Color(0xFF03a9fc)
                     ),
                     onClick = {
+                        apiJob.cancel()
+                        launchApiJob()
                         isConnectionPanelHidden.value = true
                     }
                 ) {
