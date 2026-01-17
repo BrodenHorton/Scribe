@@ -64,7 +64,7 @@ import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
 class MainActivity : ComponentActivity() {
-    val defaultApiUrl = "10.0.2.2"
+    val defaultApiUrl = "10.0.2.2:3000"
 
     var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
     var lastSpeechBlockBySpeaker: MutableMap<Int, SpeechBlock> = mutableMapOf()
