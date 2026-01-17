@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -36,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -48,14 +52,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import java.io.IOException
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
+import java.net.MalformedURLException
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
 class MainActivity : ComponentActivity() {
+    val defaultApiUrl = "10.0.2.2"
+
     var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
     var lastSpeechBlockBySpeaker: MutableMap<Int, SpeechBlock> = mutableMapOf()
     var speechPrompts: MutableList<TextLine> = mutableStateListOf()
@@ -63,9 +73,12 @@ class MainActivity : ComponentActivity() {
     var speakerByIndex: MutableMap<Int, Speaker> = mutableMapOf()
     var inProgressCommandByUuid: ConcurrentHashMap<String, SpeechLine> = ConcurrentHashMap()
     var speechCommandByName: MutableMap<String, SpeechCommand> = mutableMapOf()
-    lateinit var apiJob: Job
+    var apiJob = Job()
     var isConnectionPanelHidden: MutableState<Boolean> = mutableStateOf(true)
-    var apiAddressField: MutableState<String> = mutableStateOf("10.0.2.2:3000")
+    var apiAddressTextField: MutableState<String> = mutableStateOf(defaultApiUrl)
+    var apiAddress = defaultApiUrl
+    var hasApiConnection: MutableState<Boolean> = mutableStateOf(false)
+    var fetchRequestScope: CoroutineScope = CoroutineScope(Dispatchers.IO + apiJob)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,26 +106,51 @@ class MainActivity : ComponentActivity() {
     }
 
     fun launchApiJob() {
-        val fetchRequestScope = CoroutineScope(Dispatchers.IO)
-        apiJob = fetchRequestScope.launch {
-            Log.i("Coroutine", "Fetching from API /all")
-            getInitialSpeechBlocks(apiJob)
-            Log.i("Coroutine", "Fetching from API /after")
-            getSpeechBlocks(apiJob)
+        hasApiConnection.value = false
+        runBlocking {
+            apiJob.children.forEach { job ->
+                if(job.isActive) {
+                    job.cancel()
+                }
+                job.join()
+            }
+
+            fetchRequestScope.launch {
+                Log.i("Coroutine", "Fetching from API /all")
+                hasApiConnection.value = getInitialSpeechBlocks(coroutineContext.job)
+                Log.i("API connection", "Test 5")
+                if(coroutineContext.job.isActive && hasApiConnection.value) {
+                    Log.i("Coroutine", "Fetching from API /after")
+                    getSpeechBlocks(coroutineContext.job)
+                }
+            }
         }
     }
 
-    fun getInitialSpeechBlocks(job: Job) {
-        val url = URL("http://${apiAddressField.value}/all")
+    fun getInitialSpeechBlocks(job: Job): Boolean {
+        val url: URL
+        try {
+            url = URL("http://${apiAddress}/all")
+            Log.i("Testing", "Attempting to connect to address: ${apiAddress}")
+        }
+        catch(e: MalformedURLException) {
+            Log.i("API connection", "Malformed URL detected in getInitialSpeechBlocks")
+            return false
+        }
+
+        Log.i("API connection", "Test 1")
         var connection: HttpURLConnection
         var hasConnected = false
         Log.i("API connection", "Connecting to API ...")
         while(!hasConnected && job.isActive) {
+            Log.i("API connection", "Test 2")
             try {
                 connection = url.openConnection() as HttpURLConnection
                 connection.connectTimeout = 2000
                 connection.readTimeout = 2000
+                Log.i("API connection", "Test 3")
                 if(connection.responseCode == 200) {
+                    Log.i("API connection", "Test 4")
                     Log.i("API connection", "Successfully connected to API")
                     hasConnected = true
                     val inputStream = connection.getInputStream()
@@ -152,15 +190,35 @@ class MainActivity : ComponentActivity() {
             catch(e: SocketTimeoutException) {
                 Log.i("API connection", "Unable to connect, attempting reconnect")
             }
+            catch(e: MalformedURLException) {
+                Log.i("API connection", "Malformed URL detected in getInitialSpeechBlocks")
+                return false
+            }
+            catch(e: IOException) {
+                Log.i("API connection", "IOException in getInitialSpeechBlocks")
+                return false
+            }
         }
+
+        return hasConnected
     }
 
     suspend fun getSpeechBlocks(job: Job) {
+        Log.i("API connection", "Test 6")
         var isActive = true
         while(isActive && job.isActive) {
-            val url = URL("http://${apiAddressField.value}/after?lastRequested=${lastRequested.getDateQueryParam()}")
-            val connection = url.openConnection() as HttpURLConnection
+            Log.i("API connection", "Test 7")
+            val url: URL
+            try {
+                url = URL("http://${apiAddress}/after?lastRequested=${lastRequested.getDateQueryParam()}")
+            }
+            catch(e: MalformedURLException) {
+                Log.i("API connection", "Malformed URL detected in getSpeechBlocks")
+                return
+            }
+            Log.i("API connection", "Test 8")
 
+            val connection = url.openConnection() as HttpURLConnection
             if(connection.responseCode == 200) {
                 val inputStream = connection.getInputStream()
                 val inputStreamReader = InputStreamReader(inputStream, "UTF-8")
@@ -408,18 +466,19 @@ class MainActivity : ComponentActivity() {
             Button(
                 modifier = Modifier.padding(10.dp, 0.dp, 10.dp, 10.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF03a9fc)
+                    containerColor = Color.Transparent
                 ),
                 onClick = {
                     isConnectionPanelHidden.value = false
                 }
             ) {
-                Text(
-                    text = "Connect",
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center
+                // 02cdfa
+                val imageColor = if(hasApiConnection.value) Color(0xFF02c0fa) else Color.Gray
+                Image(
+                    painter = painterResource(id = R.drawable.wifi_icon),
+                    contentDescription = "API Connection Icon",
+                    colorFilter = ColorFilter.tint(imageColor),
+                    modifier = Modifier.size(40.dp)
                 )
             }
         }
@@ -470,10 +529,10 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 OutlinedTextField(
-                    value = apiAddressField.value,
+                    value = apiAddressTextField.value,
                     onValueChange = { newText ->
                         // Update the state with the new value whenever the user types
-                        apiAddressField.value = newText
+                        apiAddressTextField.value = newText
                     },
                     label = { Text(text = "API Address", fontSize = 18.sp) },
                     placeholder = { Text(text = "Enter IP Address and port", fontSize = 18.sp) },
@@ -490,7 +549,7 @@ class MainActivity : ComponentActivity() {
                         containerColor = Color(0xFF03a9fc)
                     ),
                     onClick = {
-                        apiJob.cancel()
+                        apiAddress = apiAddressTextField.value
                         launchApiJob()
                         isConnectionPanelHidden.value = true
                     }
