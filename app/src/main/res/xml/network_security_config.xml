@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!--<domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">example.com</domain>
-        &lt;!&ndash; Add more domains as needed &ndash;&gt;
-    </domain-config>-->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">http://172.20.2.239:3000</domain>
+        <!-- Add more domains as needed -->
+    </domain-config>
     <!-- Optionally, you can add a base-config to permit cleartext to all domains -->
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

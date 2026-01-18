@@ -64,7 +64,8 @@ import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
 class MainActivity : ComponentActivity() {
-    val defaultApiUrl = "10.0.2.2:3000"
+    val version = "Dev v1.7"
+    val defaultApiUrl = ""
 
     var speechBlocks: MutableList<SpeechBlock> = mutableStateListOf()
     var lastSpeechBlockBySpeaker: MutableMap<Int, SpeechBlock> = mutableMapOf()
@@ -95,7 +96,6 @@ class MainActivity : ComponentActivity() {
 
         registerCommands()
         speechPrompts.add(TextLine("Connect to API"))
-        launchApiJob()
     }
 
     fun registerCommands() {
@@ -118,7 +118,6 @@ class MainActivity : ComponentActivity() {
             fetchRequestScope.launch {
                 Log.i("Coroutine", "Fetching from API /all")
                 hasApiConnection.value = getInitialSpeechBlocks(coroutineContext.job)
-                Log.i("API connection", "Test 5")
                 if(coroutineContext.job.isActive && hasApiConnection.value) {
                     Log.i("Coroutine", "Fetching from API /after")
                     getSpeechBlocks(coroutineContext.job)
@@ -132,25 +131,21 @@ class MainActivity : ComponentActivity() {
         try {
             url = URL("http://${apiAddress}/all")
             Log.i("Testing", "Attempting to connect to address: ${apiAddress}")
+            speechPrompts.add(TextLine("Attempting to connect to address: ${apiAddress}"))
         }
         catch(e: MalformedURLException) {
             Log.i("API connection", "Malformed URL detected in getInitialSpeechBlocks")
             return false
         }
 
-        Log.i("API connection", "Test 1")
         var connection: HttpURLConnection
         var hasConnected = false
-        Log.i("API connection", "Connecting to API ...")
         while(!hasConnected && job.isActive) {
-            Log.i("API connection", "Test 2")
             try {
                 connection = url.openConnection() as HttpURLConnection
                 connection.connectTimeout = 2000
                 connection.readTimeout = 2000
-                Log.i("API connection", "Test 3")
                 if(connection.responseCode == 200) {
-                    Log.i("API connection", "Test 4")
                     Log.i("API connection", "Successfully connected to API")
                     hasConnected = true
                     val inputStream = connection.getInputStream()
@@ -185,17 +180,21 @@ class MainActivity : ComponentActivity() {
                 }
                 else {
                     Log.i("API connection", "Error when sending GET request to endpoint /all from Scribe Server")
+                    speechPrompts.add(TextLine("Error when sending GET request to endpoint /all from Scribe Server. Response code ${connection.responseCode}"))
                 }
             }
             catch(e: SocketTimeoutException) {
                 Log.i("API connection", "Unable to connect, attempting reconnect")
+                speechPrompts.add(TextLine("Connection timeout for /all"))
             }
             catch(e: MalformedURLException) {
                 Log.i("API connection", "Malformed URL detected in getInitialSpeechBlocks")
+                speechPrompts.add(TextLine("Malformed URL Exception for /all"))
                 return false
             }
             catch(e: IOException) {
                 Log.i("API connection", "IOException in getInitialSpeechBlocks")
+                speechPrompts.add(TextLine("IO Exception for /all"))
                 return false
             }
         }
@@ -204,10 +203,8 @@ class MainActivity : ComponentActivity() {
     }
 
     suspend fun getSpeechBlocks(job: Job) {
-        Log.i("API connection", "Test 6")
         var isActive = true
         while(isActive && job.isActive) {
-            Log.i("API connection", "Test 7")
             val url: URL
             try {
                 url = URL("http://${apiAddress}/after?lastRequested=${lastRequested.getDateQueryParam()}")
@@ -216,7 +213,6 @@ class MainActivity : ComponentActivity() {
                 Log.i("API connection", "Malformed URL detected in getSpeechBlocks")
                 return
             }
-            Log.i("API connection", "Test 8")
 
             val connection = url.openConnection() as HttpURLConnection
             if(connection.responseCode == 200) {
@@ -341,12 +337,12 @@ class MainActivity : ComponentActivity() {
         LazyColumn(
             state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(top = 2.dp, bottom = 45.dp),
+            contentPadding = PaddingValues(start = 15.dp, end = 15.dp, top = 2.dp, bottom = 60.dp),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxSize()
                 .background(Color.White)
-                .padding(30.dp, 0.dp, 30.dp, 0.dp)
+                //.padding(10.dp, 0.dp, 10.dp, 0.dp)
         ) {
             var speechBlockIndex = 0
             var speechCommandTextLineIndex = 0
@@ -463,8 +459,19 @@ class MainActivity : ComponentActivity() {
                     )
                 }
         ) {
+            Text(
+                text = version,
+                fontWeight = FontWeight.Medium,
+                color = Color.LightGray,
+                fontSize = 20.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(start = 15.dp, bottom = 5.dp)
+                    .align(Alignment.BottomStart)
+            )
             Button(
-                modifier = Modifier.padding(10.dp, 0.dp, 10.dp, 10.dp),
+                modifier = Modifier
+                    .padding(bottom = 5.dp)
+                    .align(Alignment.BottomEnd),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Transparent
                 ),
